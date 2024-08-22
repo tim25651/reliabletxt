@@ -2,96 +2,73 @@
 from __future__ import annotations
 
 from enum import Enum
+from os import PathLike
 from pathlib import Path
+from typing import Final, TypeAlias
 
-from reliabletxt.utils import StrPath, chars_to_ords, ords_to_chars
+StrPath: TypeAlias = str | PathLike[str] | Path
 
-# class ReliableTxtLines:
-#     @staticmethod
-#     def split(text: str) -> list[str]:
-#         return text.split("\n")
-
-#     @staticmethod
-#     def join(lines: list[str]) -> str:
-#         return "\n".join(lines)
-
-START_CHAR = "\ufeff"
+NEW_LINE: Final[int] = 0x0A
 
 
-class ReliableTxtEncoding(Enum):
-    """The encoding of a ReliableTXT document
+def chars_to_ords(chars: str) -> list[int]:
+    """Convert a string to a list of code points
 
-    UTF-8, UTF-16, UTF-16-REVERSE or UTF-32
+    Args:
+        chars (str): The string to convert
+
+    Returns:
+        The list of code points
     """
+    return [ord(c) for c in chars]
 
-    UTF_8 = "utf-8"
-    UTF_16 = "utf-16-be"
-    # UTF_16_REVERSE = "utf-16-le"
-    # UTF_32 = "utf-32-be"
+
+def ords_to_chars(ords: list[int]) -> str:
+    """Convert a list of code points to a string
+
+    Args:
+        ords (list[int]): The list of code points to convert
+
+    Returns:
+        the joined string
+    """
+    return "".join([chr(c) for c in ords])
 
 
 class ReliableTxt:
-    PREAMBLES = {
-        ReliableTxtEncoding.UTF_8: b"\xef\xbb\xbf",
-        ReliableTxtEncoding.UTF_16: b"\xfe\xff",
-        # ReliableTxtEncoding.UTF_16_REVERSE: b"\xff\xfe",
-        # ReliableTxtEncoding.UTF_32: b"\x00\x00\xfe\xff",
-    }
 
     @staticmethod
-    def encode(text: str, encoding: ReliableTxtEncoding) -> bytes:
-        """Encode a text in the chosen encoding
+    def encode(text: str) -> bytes:
+        """Encode a text with "utf-8" encoding.
 
         Args:
             text (str): The text to encode
-            encoding (ReliableTxtEncoding): The encoding to use
-
         Returns:
             The encoded text
         """
-        return text.encode(encoding=encoding.value)
+        return text.encode(encoding="utf-8")
 
     @classmethod
-    def get_encoding(cls, content: bytes) -> ReliableTxtEncoding:
-        """Get the encoding of a document with a ReliableTXT preamble.
-
-        Args:
-            content (bytes): The content of the document.
+    def decode(cls, content: bytes) -> str:
+        """Decode a document with "utf-8" encoding and adds the BOM.
 
         Returns:
-            The encoding of the document (utf-8, utf-16).
+            The text.
         """
-        for encoding, preamble in cls.PREAMBLES.items():
-            if content.startswith(preamble):
-                return encoding
-
-        raise ValueError("Document does not have a ReliableTXT preamble")
-
-    @classmethod
-    def decode(cls, content: bytes) -> tuple[ReliableTxtEncoding, str]:
-        """Decode a document with a ReliableTXT preamble.
-
-        Detects the encoding of the document and decodes it and removes the preamble.
-
-        Args:
-            content (bytes): The content of the document.
-
-        Returns:
-            The encoding of the document and the text.
-        """
-        detected_encoding = cls.get_encoding(content)
-        encoding = detected_encoding.value
-        text = content.decode(encoding=encoding)
-        text = text[1:]  # Remove the Preamble
-        return detected_encoding, text
+        text = content.decode(encoding="utf-8")
+        if text[0] != "\ufeff":
+            raise ValueError("The document is not a ReliableTXT document")
+        return text[1:]
 
 
 class ReliableTxtDocument:
-    def __init__(
-        self, text: str = "", encoding: ReliableTxtEncoding = ReliableTxtEncoding.UTF_8
-    ):
+    def __init__(self, text: str = "", read_only: bool = False):
         self._text = text
-        self._encoding = encoding
+        self._read_only = read_only
+
+    @property
+    def read_only(self) -> bool:
+        return self._read_only
 
     @property
     def text(self) -> str:
@@ -99,19 +76,14 @@ class ReliableTxtDocument:
 
     @text.setter
     def text(self, text: str) -> None:
+        if self._read_only:
+            raise ValueError("The document is read-only")
+
         self._text = text
 
     @property
-    def encoding(self) -> ReliableTxtEncoding:
-        return self._encoding
-
-    @encoding.setter
-    def encoding(self, encoding: ReliableTxtEncoding) -> None:
-        self._encoding = encoding
-
-    @property
     def content(self) -> bytes:
-        return ReliableTxt.encode(self._text, self._encoding)
+        return ReliableTxt.encode(self._text)
 
     @property
     def ords(self) -> list[int]:
@@ -122,15 +94,16 @@ class ReliableTxtDocument:
         self._text = ords_to_chars(ords)
 
     def save(self, file_path: StrPath) -> None:
+        """Writes the text with the BOM to a file."""
         Path(file_path).write_text(
-            "\ufeff" + self._text, encoding=self.encoding.value, newline="\n"
+            "\ufeff" + self._text, encoding="utf-8", newline="\n"
         )
 
     @staticmethod
     def load(file_path: StrPath) -> ReliableTxtDocument:
         content = Path(file_path).read_bytes()
-        encoding, text = ReliableTxt.decode(content)
-        return ReliableTxtDocument(text, encoding)
+        text = ReliableTxt.decode(content)
+        return ReliableTxtDocument(text)
 
 
 class ReliableTxtCharIterator:
@@ -142,7 +115,7 @@ class ReliableTxtCharIterator:
         line_ix = 0
         line_position = 0
         for i in range(self._ix):
-            if self._chars[i] == 0x0A:
+            if self._chars[i] == NEW_LINE:
                 line_ix += 1
                 line_position = 0
             else:

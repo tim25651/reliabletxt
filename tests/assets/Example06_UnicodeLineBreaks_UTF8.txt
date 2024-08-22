@@ -1,0 +1,3 @@
+﻿Line1| Line Feed (U+000A):
+Line2| Line Tabulation (U+000B):'' Form Feed (U+000C):'' Carriage Return (U+000D):'' Next Line (U+0085):'' Line Separator (U+2028):' ' Paragraph Separator (U+2029):' '
+Line3|
