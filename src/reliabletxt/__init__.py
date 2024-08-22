@@ -9,6 +9,7 @@ from typing import Final, TypeAlias
 StrPath: TypeAlias = str | PathLike[str] | Path
 
 NEW_LINE: Final[int] = 0x0A
+NEW_LINE_CHAR: Final[str] = "\n"
 
 
 def chars_to_ords(chars: str) -> list[int]:
@@ -96,7 +97,7 @@ class ReliableTxtDocument:
     def save(self, file_path: StrPath) -> None:
         """Writes the text with the BOM to a file."""
         Path(file_path).write_text(
-            "\ufeff" + self._text, encoding="utf-8", newline="\n"
+            "\ufeff" + self._text, encoding="utf-8", newline="\n"  # NEW_LINE_CHAR
         )
 
     @staticmethod
@@ -108,14 +109,25 @@ class ReliableTxtDocument:
 
 class ReliableTxtCharIterator:
     def __init__(self, text: str):
+        """Initializes the iterator with a text."""
         self._chars = chars_to_ords(text)
         self._ix = 0
 
+    @property
+    def ix(self) -> int:
+        """The current index in the text."""
+        return self._ix
+
+    def forward(self) -> None:
+        """Advances the iterator."""
+        self._ix += 1
+
     def get_line_info(self) -> tuple[int, int]:
+        """Returns the line index and the position in the line."""
         line_ix = 0
         line_position = 0
         for i in range(self._ix):
-            if self._chars[i] == NEW_LINE:
+            if self._chars[i] == 0x0A:  # NEW_LINE
                 line_ix += 1
                 line_position = 0
             else:
@@ -123,15 +135,18 @@ class ReliableTxtCharIterator:
         return line_ix, line_position
 
     def is_eof(self) -> bool:
+        """True if the iterator is at the end of the text."""
         return self._ix >= len(self._chars)
 
     def is_char(self, c: int) -> bool:
+        """True if the current character is c."""
         if self.is_eof():
             return False
         return self._chars[self._ix] == c
 
     def try_read_char(self, c: int) -> bool:
+        """True if the current character is c and advances the iterator."""
         if not self.is_char(c):
             return False
-        self._ix += 1
+        self.forward()
         return True
