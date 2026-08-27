@@ -1,0 +1,17 @@
+[package]
+name = "reliabletxt"
+version = "0.1.0"
+edition = "2024"
+description = "Reader and writer for ReliableTXT UTF-8 text files"
+
+[lib]
+name = "_reliabletxt"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.29.2", features = ["extension-module"] }
+
+[profile.release]
+codegen-units = 1
+debug = false
+lto = "fat"
